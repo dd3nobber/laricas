@@ -9,9 +9,10 @@ import difflib
 from flask import Flask
 from threading import Thread
 from dotenv import load_dotenv
-from datetime import datetime
-from datetime import datetime
+from datetime import datetime, time
 from zoneinfo import ZoneInfo
+import asyncio
+import re
 
 load_dotenv()
 
@@ -29,17 +30,17 @@ hora_local = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d-%m-%Y %H:%
 # Definindo os produtos com a quantidade de ingredientes necessária para cada um
 produtos = {
     '🍔 X-Tudo': {
-        'ingredientes': {'🥩 Hambúrguer': 1, '🦐 Camarão': 1, '🥬 Alface': 1, '🍅 Tomate': 1, '🧀 Queijo': 1, '🧈 Manteiga': 1, '🍞 Pão de Hambúrguer': 1},
+        'ingredientes': {'🥩 Hambúrguer': 1, '🍞 Pão de Hambúrguer': 1, '🧀 Queijo': 1, '🧈 Manteiga': 1, '🥬 Alface': 1, '🍅 Tomate': 1, '🦐 Camarão': 1},
         'peso': 0.5,
         'categoria': 'comida'
     },
     '🥗 X-Salada': {
-        'ingredientes': {'🥩 Hambúrguer': 1, '🥬 Alface': 1, '🍅 Tomate': 1, '🧀 Queijo': 1, '🧈 Manteiga': 1, '🍞 Pão de Hambúrguer': 1},
+        'ingredientes': {'🥩 Hambúrguer': 1, '🍞 Pão de Hambúrguer': 1, '🧀 Queijo': 1, '🧈 Manteiga': 1, '🥬 Alface': 1, '🍅 Tomate': 1},
         'peso': 0.5,
         'categoria': 'comida'
     },
     '🥪 X-Burguer': {
-        'ingredientes': {'🥩 Hambúrguer': 1, '🧀 Queijo': 1, '🧈 Manteiga': 1, '🍞 Pão de Hambúrguer': 1},
+        'ingredientes': {'🥩 Hambúrguer': 1, '🍞 Pão de Hambúrguer': 1, '🧀 Queijo': 1, '🧈 Manteiga': 1},
         'peso': 0.5,
         'categoria': 'comida'
     },
@@ -57,26 +58,6 @@ produtos = {
         'ingredientes': {'🌽 Milho': 2},
         'peso': 0.5,
         'categoria': 'comida'
-    },
-    '🍵 Chá Camomila': {
-        'ingredientes': {'💧 Água': 1, '🍵 Camomila': 1},
-        'peso': 0.5,
-        'categoria': 'bebida'
-    },
-    '🍓 Suco Morango': {
-        'ingredientes': {'🍓 Morango': 2, '💧 Água': 1},
-        'peso': 0.5,
-        'categoria': 'bebida'
-    },
-    '🍍 Suco Abacaxi': {
-        'ingredientes': {'🍍 Abacaxi': 2, '💧 Água': 1},
-        'peso': 0.5,
-        'categoria': 'bebida'
-    },
-    '🍌 Suco Banana': {
-        'ingredientes': {'🍌 Banana': 2, '💧 Água': 1},
-        'peso': 0.5,
-        'categoria': 'bebida'
     },
     '🍋 Suco Maracujá': {
         'ingredientes': {'🍋 Maracujá': 2, '💧 Água': 1},
@@ -108,8 +89,23 @@ produtos = {
         'peso': 0.5,
         'categoria': 'bebida'
     },
-    '☕ Café': {
-        'ingredientes': {'☕ Grãos de Café': 1, '💧 Água': 1},
+        '🍓 Suco Morango': {
+        'ingredientes': {'🍓 Morango': 2, '💧 Água': 1},
+        'peso': 0.5,
+        'categoria': 'bebida'
+    },
+    '🍍 Suco Abacaxi': {
+        'ingredientes': {'🍍 Abacaxi': 2, '💧 Água': 1},
+        'peso': 0.5,
+        'categoria': 'bebida'
+    },
+    '🍌 Suco Banana': {
+        'ingredientes': {'🍌 Banana': 2, '💧 Água': 1},
+        'peso': 0.5,
+        'categoria': 'bebida'
+    },
+        '🍵 Chá Camomila': {
+        'ingredientes': {'💧 Água': 1, '🍵 Camomila': 1},
         'peso': 0.5,
         'categoria': 'bebida'
     },
@@ -117,20 +113,25 @@ produtos = {
         'ingredientes': {'⚡ Grãos de Guaraná': 1, '💧 Água': 1},
         'peso': 0.5,
         'categoria': 'bebida'
-    },
-    '🍞 Pão de Hambúrguer': {
-        'ingredientes': {'🌾 Farinha de Trigo': 1},
-        'peso': 0.2,
-        'categoria': 'comida'
+    }, 
+        '☕ Café': {
+        'ingredientes': {'☕ Grãos de Café': 1, '💧 Água': 1},
+        'peso': 0.5,
+        'categoria': 'bebida'
     },
     '🥩 Hambúrguer': {
         'ingredientes': {
-            '🥩 Cupim Cru': 1,
             '🥩 Músculo Cru': 1,
-            '🥩 Picanha Cru': 1,
+            '🥩 Maminha Cru': 1,
+            '🥩 Cupim Cru': 1,
             '🥩 Costela Cru': 1,
-            '🥩 Maminha Cru': 1
+            '🥩 Picanha Cru': 1
         },
+        'peso': 0.2,
+        'categoria': 'comida'
+    },   
+        '🍞 Pão de Hambúrguer': {
+        'ingredientes': {'🌾 Farinha de Trigo': 1},
         'peso': 0.2,
         'categoria': 'comida'
     },
@@ -175,10 +176,10 @@ pesos_ingredientes = {
 
 ingredientes = { 
     "comida": [
-        "🥩 Hambúrguer", "🦐 Camarão", "🥬 Alface", "🍅 Tomate", "🧀 Queijo", "🧈 Manteiga", "🍞 Pão de Hambúrguer", "🐟 Sardinha", "🌽 Milho", "🌾 Trigo" , "🌾 Farinha de Trigo", "🥩 Cupim Cru", "🥩 Músculo Cru", "🥩 Picanha Cru", "🥩 Costela Cru", "🥩 Maminha Cru"
+        "🥩 Hambúrguer", "🍞 Pão de Hambúrguer", "🧀 Queijo", "🧈 Manteiga", "🥬 Alface", "🍅 Tomate", "🦐 Camarão", "🐟 Sardinha", "🌽 Milho", "🥩 Músculo Cru", "🥩 Maminha Cru", "🥩 Cupim Cru", "🥩 Costela Cru", "🥩 Picanha Cru", "🌾 Farinha de Trigo","🌾 Trigo"  
     ],
     "bebida": [
-        "☕ Grãos de Café", "⚡ Grãos de Guaraná", "🍵 Camomila", "💧 Água", '🍓 Morango', '🍍 Abacaxi', '🍌 Banana', '🍋 Maracujá', '🥝 Kiwi', '🥭 Caju', '🍊 Laranja', '🍇 Uva', '🍑 Pêssego',
+        "💧 Água",'🍋 Maracujá', '🥝 Kiwi', '🥭 Caju', '🍊 Laranja', '🍇 Uva', '🍑 Pêssego', '🍓 Morango', '🍍 Abacaxi', '🍌 Banana', "🍵 Camomila", "⚡ Grãos de Guaraná", "☕ Grãos de Café"
         ]
     }
 
@@ -189,7 +190,7 @@ producoes_usuario = {}
 
 mensagens_stock = {}
 mensagens_historico = {}
-
+mensagens_instrucoes = {}
 # Pasta onde este ficheiro .py está guardado
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -1208,9 +1209,9 @@ def criar_view_inicial(user_id):
     view = View(timeout=None)
 
     # Botões para escolha da produção
-    botao_produtos = Button(label="Produzir por Produtos", style=discord.ButtonStyle.primary)
-    botao_ingredientes = Button(label="Produzir por Ingredientes", style=discord.ButtonStyle.primary)
-    botao_stock = Button(label="Estoque", style=discord.ButtonStyle.primary)
+    botao_produtos = Button(label="🌮 Produzir por Produtos", style=discord.ButtonStyle.primary)
+    botao_ingredientes = Button(label="🥦 Produzir por Ingredientes", style=discord.ButtonStyle.primary)
+    botao_stock = Button(label="📦 Estoque", style=discord.ButtonStyle.primary)
     async def callback_produtos(interaction):
         if interaction.user.id != user_id:
             await interaction.channel.send("Esse botão não é para você.", ephemeral=True)
@@ -1379,7 +1380,8 @@ def criar_view_stock(interaction:discord.Interaction) -> View:
         return 0
 
     # ---------- apagar mensagens antigas ----------
-    async def apagar_stock_antigo():
+
+    async def apagar_stock_antigo(user_id):
         if user_id in mensagens_stock:
             for msg in mensagens_stock[user_id]:
                 try:
@@ -1388,7 +1390,7 @@ def criar_view_stock(interaction:discord.Interaction) -> View:
                     pass
             mensagens_stock.pop(user_id)
 
-    async def apagar_historico_antigo():
+    async def apagar_historico_antigo(user_id):
         if user_id in mensagens_historico:
             for msg in mensagens_historico[user_id]:
                 try:
@@ -1397,12 +1399,33 @@ def criar_view_stock(interaction:discord.Interaction) -> View:
                     pass
             mensagens_historico.pop(user_id)
 
+    async def apagar_historico_e_instrucao_antigos(user_id):
+        # Apagar mensagens do histórico
+        if user_id in mensagens_historico:
+            for msg in mensagens_historico[user_id]:
+                try:
+                    await msg.delete()
+                except:
+                    pass
+            mensagens_historico.pop(user_id)
+
+        # Apagar mensagens da instrução
+        if user_id in mensagens_instrucoes:
+            for msg in mensagens_instrucoes[user_id]:
+                try:
+                    await msg.delete()
+                except:
+                    pass
+            mensagens_instrucoes.pop(user_id)
+
     # ---------- MENU PRINCIPAL ----------
     async def volta_menu(inter):
-        await apagar_historico_antigo()
+        user_id = inter.user.id
+        await apagar_historico_antigo(user_id)
+        await apagar_historico_e_instrucao_antigos(user_id)
         await limpa_quantidade_msg(user_id)
         await limpa_acao_msg(user_id)
-        await apagar_stock_antigo()
+        await apagar_stock_antigo(user_id)
         await inter.message.delete()
         await inter.channel.send(
             "Escolha uma opção:", view=criar_view_stock(inter)
@@ -1410,10 +1433,12 @@ def criar_view_stock(interaction:discord.Interaction) -> View:
 
     # ---------- SUB‑MENUS ----------
     async def abre_submenu(inter, colecao, titulo):
-        await apagar_historico_antigo()
+        user_id = inter.user.id
+        await apagar_historico_antigo(user_id)
+        await apagar_historico_e_instrucao_antigos(user_id)
         await limpa_quantidade_msg(user_id)
         await limpa_acao_msg(user_id)
-        await apagar_stock_antigo()
+        await apagar_stock_antigo(user_id)
         await inter.message.delete()
 
         nova = View(timeout=None)
@@ -1493,8 +1518,8 @@ def criar_view_stock(interaction:discord.Interaction) -> View:
         await inter.channel.send(titulo, view=nova)
 
     # ---------- botões principais ----------
-    bt_prod = Button(label="🛒 Produtos", style=discord.ButtonStyle.primary)
-    bt_prod.callback = lambda i: abre_submenu(i, produtos, "🛒 Escolha um produto:")
+    bt_prod = Button(label="🌮 Produtos", style=discord.ButtonStyle.primary)
+    bt_prod.callback = lambda i: abre_submenu(i, produtos, "🌮 Escolha um produto:")
 
     bt_beb = Button(label="🥤 Ingredientes Bebida", style=discord.ButtonStyle.secondary)
     bt_beb.callback = lambda i: abre_submenu(i, ingredientes["bebida"], "🥤 Escolha um ingrediente de bebida:")
@@ -1516,7 +1541,7 @@ def criar_view_stock(interaction:discord.Interaction) -> View:
 
         async def sim_cb(i):
             # Limpa dados
-            await apagar_stock_antigo()
+            await apagar_stock_antigo(user_id)
             if user_id in producoes_stock:
                 producoes_stock[user_id].clear()
             else:
@@ -1554,14 +1579,16 @@ def criar_view_stock(interaction:discord.Interaction) -> View:
 
     bt_limpar.callback = limpar_cb
     async def stock_main_cb(inter):
-        await apagar_historico_antigo()
+        user_id = inter.user.id
+        await apagar_historico_antigo(user_id)
+        await apagar_historico_e_instrucao_antigos(user_id)
         await limpa_quantidade_msg(user_id)
         await limpa_acao_msg(user_id)
         if not await tem_permissao(interaction,user_id):
             await inter.response.send_message("Esse botão não é para você.", ephemeral=True)
             return
 
-        await apagar_stock_antigo()
+        await apagar_stock_antigo(user_id)
 
         # Ajuste de colunas
         col_nome = 19  # Reduzido de 28 → para reduzir espaço entre nome e quantidade
@@ -1628,71 +1655,127 @@ def criar_view_stock(interaction:discord.Interaction) -> View:
     bt_historico = Button(label="📜 Ver Histórico", style=discord.ButtonStyle.secondary)
 
     async def historico_cb(inter):
-        await apagar_historico_antigo()
+        user_id = inter.user.id
+        await apagar_historico_antigo(user_id)
+        await apagar_historico_e_instrucao_antigos(user_id)
+        await apagar_stock_antigo(user_id)
         await limpa_quantidade_msg(user_id)
-        canal_atual = inter.channel.name  # exemplo: "gestão-laricas"
-        historico = obter_historico()
+        await limpa_acao_msg(user_id)  # Limpa mensagens anteriores do histórico desse user
 
-        # FILTRAR: apenas entradas que tenham canal igual ao atual
+        canal_atual = inter.channel.name
+        historico = obter_historico()
         entradas = [h for h in historico if h.get("canal") == canal_atual]
 
         if not entradas:
-            await inter.channel.send(
-                f"📭 Nenhum histórico encontrado para este canal (`{canal_atual}`).",
-                delete_after=5
-            )
+            await inter.channel.send("📜 Nenhum histórico encontrado.", delete_after=5)
             return
-        
-    # Configurações de largura fixas para alinhamento
-        col_user_oper = 20  # largura total para nome + seta + operação
-        col_prod = 22
 
-        linhas = []
-        for h in entradas[-15:]:
-            user = h.get("username", "Desconhecido")
-            oper = h.get("operacao", "—").upper()
+        def formatar_entradas(lista):
+            linhas = []
 
-            # Cria string "nome → OPERACAO" com só 1 espaço antes da seta, sem ljust no nome
-            user_oper = f"{user} → {oper}"
+            for h in lista:
+                timestamp = h.get("timestamp", "-")  # 19 chars fixos
+                user = h.get("username", "Desconhecido")
+                oper = h.get("operacao", "—").upper()
+                user_oper = f"**{user}** → {oper}"  # sem espaços na seta para compactar
 
-            adicionados = h.get("adicionados", {})
-            retirados = h.get("retirados", {})
+                adicionados = h.get("adicionados", {})
+                retirados = h.get("retirados", {})
 
-            if oper == "PRODUZIR":
-                produto = next(iter(adicionados.keys()), None)
-                qtd_prod = adicionados.get(produto, None) if produto else None
-                produto_str = f"{produto} x{qtd_prod}" if produto else "-"
+                if oper == "PRODUZIR":
+                    produto = next(iter(adicionados.keys()), None)
+                    qtd_prod = adicionados.get(produto, None) if produto else None
+                    produto_str = f"{produto} x{qtd_prod}" if produto else "-"
+                    ingredientes_usados = ", ".join(f"{k} x{v}" for k, v in retirados.items()) if retirados else "-"
+                    linha = f"{timestamp} | {user_oper} | {produto_str} | {ingredientes_usados}"
+                elif oper == "LIMPAR":
+                    linha = f"{timestamp} | {user_oper} | TODOS"
+                else:
+                    itens = []
+                    if adicionados:
+                        itens += [f"{k} x{v}" for k, v in adicionados.items()]
+                    if retirados:
+                        itens += [f"{k} x{v}" for k, v in retirados.items()]
+                    itens_str = ", ".join(itens) if itens else "-"
+                    linha = f"{timestamp} | {user_oper} | {itens_str}"
 
-                ingredientes_usados = ", ".join(f"{k} x{v}" for k, v in retirados.items()) if retirados else "-"
+                linhas.append(linha)
 
-                # Ajusta espaçamento: alinha o user_oper para manter barra alinhada
-                parte_1 = user_oper.ljust(col_user_oper)
-                produto_formatado = produto_str.ljust(col_prod)
+            return "\n".join(linhas)
 
-                linha = f"{parte_1}| {produto_formatado}| {ingredientes_usados}"
+        # Mostra os últimos 15 inicialmente
+        ultimos = entradas[-15:]
+        texto = formatar_entradas(ultimos)
 
-            elif oper == "LIMPAR":
-                # Caso especial: se for limpar estoque, mostra só TODOS sem 'x tudo'
-                parte_1 = user_oper.ljust(col_user_oper)
-                linha = f"{parte_1}| TODOS"
+        msg_hist = await inter.channel.send(f"📜 **Histórico de Movimentações**\n{texto}")
+        mensagens_historico.setdefault(user_id, []).append(msg_hist)
 
+
+        msg_instrucao = await inter.channel.send(
+            "🗓️ Para filtrar por data, escreva no chat:\n"
+            "`dd-mm-aaaa` ou `dd-mm-aaaa a dd-mm-aaaa`"
+        )
+        mensagens_instrucoes.setdefault(user_id, []).append(msg_instrucao)
+
+        def check(m):
+            return m.channel == inter.channel and m.author == inter.user
+
+        import re
+        from datetime import datetime
+
+        try:
+            msg_data = await bot.wait_for('message', timeout=60, check=check)
+            texto_data = msg_data.content.strip().replace("/", "-")  # aceita barras ou traços
+
+            try:
+                await msg_data.delete()
+            except discord.Forbidden:
+                pass
+
+            datas = re.findall(r"\d{2}-\d{2}-\d{4}", texto_data)
+            if not datas:
+                await inter.channel.send("❌ Formato de data inválido. Use: `dd-mm-aaaa` ou `dd-mm-aaaa a dd-mm-aaaa`.", delete_after=10)
+                return
+
+            if len(datas) == 1:
+                data_inicio = datetime.strptime(datas[0], "%d-%m-%Y")
+                data_fim = datetime.combine(data_inicio.date(), time(23, 59, 59))  # final do dia
             else:
-                itens = []
-                if adicionados:
-                    itens += [f"{k} x{v}" for k, v in adicionados.items()]
-                if retirados:
-                    itens += [f"{k} x{v}" for k, v in retirados.items()]
+                data_inicio = datetime.strptime(datas[0], "%d-%m-%Y")
+                data_fim = datetime.strptime(datas[1], "%d-%m-%Y")
+                data_fim = datetime.combine(data_fim.date(), time(23, 59, 59))  # final do dia do intervalo
 
-                itens_str = ", ".join(itens) if itens else "-"
+            filtrado = []
+            for h in entradas:
+                try:
+                    data_h = datetime.strptime(h["timestamp"], "%d-%m-%Y %H:%M:%S")
+                    if data_inicio <= data_h <= data_fim:
+                        filtrado.append(h)
+                except Exception:
+                    continue
 
-                parte_1 = user_oper.ljust(col_user_oper)
-                linha = f"{parte_1}| {itens_str}"
+            if not filtrado:
+                await inter.channel.send("📭 Nenhum histórico encontrado para essa data.", delete_after=10)
+                return
 
-            linhas.append(linha)
+            filtrado.sort(key=lambda h: datetime.strptime(h["timestamp"], "%d-%m-%Y %H:%M:%S"))
 
-        texto = "```\n" + "\n".join(linhas) + "\n```"
-        msg = await inter.channel.send(f"📜 **Histórico de Movimentações**\n{texto}")
-        mensagens_historico.setdefault(user_id, []).append(msg)
+            texto_filtrado = formatar_entradas(filtrado)
+
+            try:
+                await msg_hist.delete()
+            except discord.Forbidden:
+                pass
+
+            await inter.channel.send(
+                f"📅 **Histórico filtrado de {datas[0]}" +
+                (f" até {datas[1]}" if len(datas) == 2 else "") +
+                f":**\n{texto_filtrado}"
+            )
+
+        except asyncio.TimeoutError:
+            pass
+
 
     bt_historico.callback = historico_cb
 
@@ -2017,11 +2100,18 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    # 🔒 FILTRAR CANAIS PERMITIDOS
+    nome_canal = message.channel.name.lower()
+    canais_permitidos = ["iniciar", "👑│hieraquia", "gestão-laricas"]
+
+    if not (nome_canal in canais_permitidos or "produção" in nome_canal):
+        return  # Ignora mensagens fora dos canais permitidos
+
     user_id = message.author.id
     content = message.content.lower().strip()
 
     # ----------- Lógica de HIERARQUIA ------------
-    if message.channel.name.lower() == "hierarquia":
+    if message.channel.name.lower() == "👑│hieraquia":
         nome = passaporte = cargo_texto = None
         linhas = message.content.splitlines()
 
@@ -2135,6 +2225,9 @@ async def on_message(message):
                     pass
 
             # Salva a quantidade e envia confirmação
+            if user_id not in producoes_usuario:
+                producoes_usuario[user_id] = {}
+
             producoes_usuario[user_id]['quantidade_temp'] = qtd
 
             # Apaga a mensagem de erro da quantidade anterior, se houver
@@ -2155,7 +2248,31 @@ async def on_message(message):
         return
 
     # Se o conteúdo não for um número inteiro ou números positivos
-    if not message.content.isdigit() or float(message.content) <= 0 or any(c in message.content for c in ['.', ',', '-', 'T', 't']):
+    # Verifica se a mensagem é uma data ou intervalo de datas no formato dd-mm-aaaa ou dd-mm-aaaa a dd-mm-aaaa
+    def eh_data_ou_intervalo(texto):
+        padrao_data = r"^\d{2}-\d{2}-\d{4}$"
+        padrao_intervalo = r"^\d{2}-\d{2}-\d{4}\s+a\s+\d{2}-\d{2}-\d{4}$"
+        return re.match(padrao_data, texto) or re.match(padrao_intervalo, texto)
+
+    content_stripped = message.content.strip()
+
+    # Se não for número e também não for data ou intervalo, aí sim apaga a mensagem e envia erro
+    if (not content_stripped.isdigit() or int(content_stripped) <= 0) and not eh_data_ou_intervalo(content_stripped):
+        if user_id in producoes_usuario:
+            if 'erro_msg' in producoes_usuario[user_id]:
+                try:
+                    await producoes_usuario[user_id]['erro_msg'].delete()
+                except discord.Forbidden:
+                    pass
+                del producoes_usuario[user_id]['erro_msg']
+
+            erro_msg = await message.channel.send("❌ Apenas números inteiros positivos são permitidos. Tente novamente!", delete_after=10)
+            producoes_usuario[user_id]['erro_msg'] = erro_msg
+
+            try:
+                await message.delete()
+            except discord.Forbidden:
+                pass
         if user_id in producoes_usuario:
             # Apaga as mensagens de erro anteriores, se houver
             if 'erro_msg' in producoes_usuario[user_id]:
@@ -2189,4 +2306,4 @@ def manter_online():
     t = Thread(target=run)
     t.start()
 
-bot.run(os.getenv('DISCORD_TOKEN'))
+bot.run(os.getenv('DISCORD_TOKEN'), reconnect=True)
